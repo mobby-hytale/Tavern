@@ -9,7 +9,7 @@ LDFLAGS  = -target x86_64-pc-windows-msvc -shared
 INCLUDES = -I./include -I./include/lua
 OBJ_DIR = obj
 
-SRCS_CPP = src/main.cpp src/Utils.cpp
+SRCS_CPP = src/main.cpp src/Utils.cpp LuaUtils.cpp
 SRCS_LUA = $(wildcard src/lua/*.c)
 SRCS_MH  = $(wildcard src/minhook/*.c) $(wildcard src/minhook/hde/*.c)
 

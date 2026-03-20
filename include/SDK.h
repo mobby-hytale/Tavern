@@ -47,10 +47,6 @@ typedef void(__thiscall* tFNameToString)(const void*, FString&);
 extern tFNameToString FNameToString;
 extern TUObjectArray* GObjects;
 
-std::string GetName(UObject* Obj);
-UObject* FindObject(std::string NameContains);
-UObject* GetPlayerCharacter();
-
 typedef void(__thiscall* tProcessEvent)(UObject*, UFunction*, void*);
 
 extern tProcessEvent oProcessEvent;
