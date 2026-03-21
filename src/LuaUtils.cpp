@@ -21,7 +21,23 @@ namespace fs = std::filesystem;
 
 std::map<int, int> keyBinds;
 
-int Lua_FindObject(lua_State* L) {
+static void PushUObject(lua_State* L, UObject* obj) {
+	UObject** ud = (UObject**)lua_newuserdata(L, sizeof(UObject*));
+	*ud = obj;
+	luaL_getmetatable(L, "UObjectMeta");
+	lua_setmetatable(L, -2);
+}
+
+static bool MatchesTarget(UObject* obj, const std::string& target) {
+	if (!obj || (uintptr_t)obj < 0x10000) return false;
+	std::string name = GetName(obj);
+	if (name.find("Default__") != std::string::npos) return false;
+	std::string nameLower = name;
+	std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+	return nameLower.find(target) != std::string::npos;
+}
+
+int Lua_FindFirstOf(lua_State* L) {
 	const char* targetName = luaL_checkstring(L, 1);
 	if (!targetName || !GObjects) return 0;
 
@@ -30,25 +46,50 @@ int Lua_FindObject(lua_State* L) {
 
 	for (int i = 0; i < GObjects->NumElements; i++) {
 		UObject* obj = GObjects->GetObjectById(i);
-		if (!obj || (uintptr_t)obj < 0x10000) continue;
-
-		std::string name = GetName(obj);
-		std::string nameLower = name;
-		std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
-
-		if (nameLower.find(target) != std::string::npos) {
-			if (name.find("Default__") == std::string::npos) {
-				UObject** ud = (UObject**)lua_newuserdata(L, sizeof(UObject*));
-				*ud = obj;
-
-				luaL_getmetatable(L, "UObjectMeta");
-				lua_setmetatable(L, -2);
-
-				return 1;
-			}
-		}
+		if (!MatchesTarget(obj, target)) continue;
+		PushUObject(L, obj);
+		return 1;
 	}
 	return 0;
+}
+
+int Lua_FindLastOf(lua_State* L) {
+	const char* targetName = luaL_checkstring(L, 1);
+	if (!targetName || !GObjects) return 0;
+
+	std::string target(targetName);
+	std::transform(target.begin(), target.end(), target.begin(), ::tolower);
+
+	UObject* last = nullptr;
+	for (int i = 0; i < GObjects->NumElements; i++) {
+		UObject* obj = GObjects->GetObjectById(i);
+		if (MatchesTarget(obj, target)) last = obj;
+	}
+
+	if (!last) return 0;
+	PushUObject(L, last);
+	return 1;
+}
+
+int Lua_FindAllOf(lua_State* L) {
+	const char* targetName = luaL_checkstring(L, 1);
+	if (!targetName || !GObjects) return 0;
+
+	std::string target(targetName);
+	std::transform(target.begin(), target.end(), target.begin(), ::tolower);
+
+	lua_newtable(L);
+	int count = 0;
+
+	for (int i = 0; i < GObjects->NumElements; i++) {
+		UObject* obj = GObjects->GetObjectById(i);
+		if (!MatchesTarget(obj, target)) continue;
+		count++;
+		PushUObject(L, obj);
+		lua_rawseti(L, -2, count);
+	}
+
+	return 1;
 }
 
 int Lua_Inspect(lua_State* L) {
@@ -346,7 +387,9 @@ void LuaRegister() {
 	L = luaL_newstate();
 	luaL_openlibs(L);
 
-	lua_register(L, "FindObject", Lua_FindObject);
+	lua_register(L, "FindFirstOf", Lua_FindFirstOf);
+	lua_register(L, "FindLastOf",  Lua_FindLastOf);
+	lua_register(L, "FindAllOf",   Lua_FindAllOf);
 	lua_register(L, "GetName", Lua_GetName);
 	lua_register(L, "WriteFloat", Lua_WriteFloat);
 	lua_register(L, "RegisterKeyBind", Lua_RegisterKeyBind);
