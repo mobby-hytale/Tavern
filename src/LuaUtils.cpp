@@ -17,9 +17,7 @@ extern "C" {
 
 lua_State* L = nullptr;
 
-tProcessEvent oProcessEvent = nullptr;
-tFNameToString FNameToString = nullptr;
-TUObjectArray* GObjects = nullptr;
+namespace fs = std::filesystem;
 
 std::map<int, int> keyBinds;
 
@@ -40,8 +38,12 @@ int Lua_FindObject(lua_State* L) {
 
 		if (nameLower.find(target) != std::string::npos) {
 			if (name.find("Default__") == std::string::npos) {
-				std::cout << "[Tavern] INSTANCE RECENTE TROUVEE : " << name << " (ID: " << i << ")" << std::endl;
-				lua_pushlightuserdata(L, obj);
+				UObject** ud = (UObject**)lua_newuserdata(L, sizeof(UObject*));
+				*ud = obj;
+
+				luaL_getmetatable(L, "UObjectMeta");
+				lua_setmetatable(L, -2);
+
 				return 1;
 			}
 		}
@@ -49,24 +51,116 @@ int Lua_FindObject(lua_State* L) {
 	return 0;
 }
 
+int Lua_Inspect(lua_State* L) {
+	UObject** ud = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
+	if (!ud || !*ud) return 0;
+	UObject* Obj = *ud;
+
+	UClass* Class = Obj->ClassPrivate;
+	if (!IS_VALID(Class)) return 0;
+
+	uintptr_t CurrentStruct = (uintptr_t)Class;
+	int depth = 0;
+
+	while (IS_VALID(CurrentStruct) && depth < 16) {
+		depth++;
+
+		std::string structName = ReadUEName(CurrentStruct);
+		printf("\n  ---- [%s] ----\n", structName.c_str());
+
+		uintptr_t Prop = *(uintptr_t*)(CurrentStruct + UE422::UStruct_Children);
+		int propCount = 0;
+
+		while (IS_VALID(Prop) && propCount < 256) {
+			propCount++;
+
+			std::string propName = ReadUEName(Prop);
+			if (propName.empty() || propName == "None") {
+				Prop = *(uintptr_t*)(Prop + UE422::UField_Next);
+				continue;
+			}
+
+			uintptr_t fieldClassPtr = *(uintptr_t*)(Prop + UE422::UObject_ClassPrivate);
+			std::string typeName = IS_VALID(fieldClassPtr)
+				? ReadUEName(fieldClassPtr)
+				: "Unknown";
+
+			if (IsPropertyType(typeName)) {
+				int32_t offset = *(int32_t*)(Prop + UE422::UProperty_Offset_Internal);
+
+				char valueStr[64] = "?";
+				uintptr_t valueAddr = (uintptr_t)Obj + offset;
+
+				if (!IsBadReadPtr((void*)valueAddr, 8)) {
+					if (typeName == "FloatProperty") {
+						snprintf(valueStr, sizeof(valueStr), "%.4f", *(float*)valueAddr);
+					} else if (typeName == "IntProperty") {
+						snprintf(valueStr, sizeof(valueStr), "%d", *(int32_t*)valueAddr);
+					} else if (typeName == "BoolProperty") {
+						snprintf(valueStr, sizeof(valueStr), "%s", *(bool*)valueAddr ? "true" : "false");
+					} else if (typeName == "ObjectProperty" || typeName == "ClassProperty") {
+						uintptr_t ptr = *(uintptr_t*)valueAddr;
+						snprintf(valueStr, sizeof(valueStr), "0x%llX", (unsigned long long)ptr);
+					} else {
+						uint64_t raw = *(uint64_t*)valueAddr;
+						snprintf(valueStr, sizeof(valueStr), "raw=0x%llX", (unsigned long long)raw);
+					}
+				}
+
+				printf("    [0x%03X] %-30s | %-20s | %s\n",
+					offset, propName.c_str(), typeName.c_str(), valueStr);
+			} else {
+				printf("    [ fn ] %-30s | %s\n", propName.c_str(), typeName.c_str());
+			}
+
+			Prop = *(uintptr_t*)(Prop + UE422::UField_Next);
+		}
+
+		uintptr_t Super = *(uintptr_t*)(CurrentStruct + UE422::UStruct_SuperStruct);
+		if (!IS_VALID(Super) || Super == CurrentStruct) break;
+		std::string superName = ReadUEName(Super);
+		if (superName == "Object") break;
+		CurrentStruct = Super;
+	}
+	return 0;
+}
+
+int Lua_ObjectNewIndex(lua_State* L) {
+	UObject** objPtr = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
+	
+	if (!objPtr || !*objPtr) return 0;
+
+	UObject* obj = *objPtr;
+	const char* propName = luaL_checkstring(L, 2);
+	float value = (float)luaL_checknumber(L, 3);
+
+	uintptr_t offset = FindPropertyOffset(obj, propName);
+
+	if (offset > 0) {
+		uintptr_t targetAddr = (uintptr_t)obj + offset;
+
+		if (!IsBadWritePtr((LPVOID)targetAddr, sizeof(float))) {
+			*(float*)targetAddr = value;
+		}
+	} else {
+		std::cout << "[Tavern] Error: Property " << propName << " not found on " << GetName(obj) << std::endl;
+	}
+	return 0;
+}
+
+UObject* GetAddressFromLua(lua_State* L, int idx) {
+	if (lua_isuserdata(L, idx)) {
+		UObject** ud = (UObject**)lua_touserdata(L, idx);
+		return *ud;
+	}
+	return (UObject*)lua_touserdata(L, idx);
+}
+
 int Lua_GetName(lua_State* L) {
-	UObject* obj = (UObject*)lua_touserdata(L, 1);
-	if (!obj || (uintptr_t)obj < 0x10000) {
-		lua_pushstring(L, "InvalidObject");
-		return 1;
-	}
-
-	FString fs;
-	FNameToString((void*)((uintptr_t)obj + 0x18), fs);
-
-	if (fs.Data && fs.Count > 0) {
-		std::wstring ws(fs.Data);
-		std::string name(ws.begin(), ws.end());
-		lua_pushstring(L, name.c_str());
-	}
-	else {
-		lua_pushstring(L, "None");
-	}
+	UObject** ud = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
+	if (!ud || !*ud) { lua_pushstring(L, "InvalidObject"); return 1; }
+	std::string name = ReadUEName((uintptr_t)*ud);
+	lua_pushstring(L, name.empty() ? "None" : name.c_str());
 	return 1;
 }
 
@@ -137,16 +231,30 @@ int Lua_GetGEngine(lua_State* L) {
 }
 
 void LoadLuaMods() {
-	const char* scriptPath = "Mods\\SpeedMod\\main.lua";
+	const std::string modsDir = "Mods";
 
-	std::cout << "[Tavern] Chargement des mods : " << scriptPath << std::endl;
-
-	if (luaL_dofile(L, scriptPath) != LUA_OK) {
-		std::cout << "[Lua Error] " << lua_tostring(L, -1) << std::endl;
-		lua_pop(L, 1);
+	if (!fs::exists(modsDir) || !fs::is_directory(modsDir)) {
+		std::cout << "[Tavern] Mods folder not found" << std::endl;
+		return;
 	}
-	else {
-		std::cout << "[Tavern] Mod charge" << std::endl;
+
+	for (const auto& entry : fs::directory_iterator(modsDir)) {
+		if (!entry.is_directory()) continue;
+
+		std::string modName = entry.path().filename().string();
+		std::string scriptPath = entry.path().string() + "\\main.lua";
+
+		if (!fs::exists(scriptPath)) {
+			std::cout << "[Tavern] " << modName << ": no main.lua, skipped" << std::endl;
+			continue;
+		}
+
+		if (luaL_dofile(L, scriptPath.c_str()) != LUA_OK) {
+			std::cout << "[Lua Error] " << modName << ": " << lua_tostring(L, -1) << std::endl;
+			lua_pop(L, 1);
+		} else {
+			std::cout << "[Tavern] " << modName << " loaded" << std::endl;
+		}
 	}
 }
 
@@ -245,6 +353,12 @@ void LuaRegister() {
 	lua_register(L, "GetGEngine", Lua_GetGEngine);
 	lua_register(L, "ReadPtr", Lua_ReadPtr);
 	lua_register(L, "GetArrayElement", Lua_GetArrayElement);
+	lua_register(L, "Inspect", Lua_Inspect);
+
+	luaL_newmetatable(L, "UObjectMeta");
+	lua_pushcfunction(L, Lua_ObjectNewIndex);
+	lua_setfield(L, -2, "__newindex");
+	lua_pop(L, 1);
 
 	LuaKeyRegister(L);
 }

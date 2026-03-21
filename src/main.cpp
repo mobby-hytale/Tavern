@@ -21,7 +21,7 @@ void __fastcall hkProcessEvent(UObject* pObject, UFunction* pFunction, void* pPa
 	static bool firstCall = true;
 	if (firstCall) {
 		Beep(1500, 200);
-		std::cout << "[Tavern] HOOK ACTIF !" << std::endl;
+		std::cout << "[Tavern] Hook active" << std::endl;
 		firstCall = false;
 	}
 	oProcessEvent(pObject, pFunction, pParams);
@@ -29,7 +29,7 @@ void __fastcall hkProcessEvent(UObject* pObject, UFunction* pFunction, void* pPa
 
 void InitializeModLoader() {
 	Beep(500, 300);
-	std::cout << "[Tavern] Initialisation" << std::endl;
+	std::cout << "[Tavern] Initializing" << std::endl;
 
 	uintptr_t addrTS = Scanner::FindPattern("48 89 5C 24 08 57 48 83 EC 30 83 79 04 00");
 	if (addrTS) FNameToString = (tFNameToString)addrTS;
@@ -53,13 +53,13 @@ void InitializeModLoader() {
 
 		GObjects = (TUObjectArray*)(addrGObj + 7 + offset);
 
-		std::cout << "[Tavern] GObjects trouve a : 0x" << std::hex << GObjects << std::endl;
-		std::cout << "[Tavern] Nombre d'objets : " << std::dec << GObjects->NumElements << std::endl;
+		std::cout << "[Tavern] GObjects found at: 0x" << std::hex << GObjects << std::endl;
+		std::cout << "[Tavern] Object count: " << std::dec << GObjects->NumElements << std::endl;
 	}
 
 	LuaRegister();
 
-	std::cout << "[Tavern] Moteur Lua pret" << std::endl;
+	std::cout << "[Tavern] Lua engine ready" << std::endl;
 }
 
 DWORD WINAPI MainThread(LPVOID lpParam) {
@@ -69,7 +69,7 @@ DWORD WINAPI MainThread(LPVOID lpParam) {
 	InitializeModLoader();
 	LoadLuaMods();
 
-	std::cout << "[Tavern] Loader" << std::endl;
+	std::cout << "[Tavern] Mod loader ready" << std::endl;
 
 	while (!(GetAsyncKeyState(VK_END) & 1)) {
 		CheckLuaInputs();

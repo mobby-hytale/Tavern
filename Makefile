@@ -42,7 +42,7 @@ $(OBJ_DIR)/%.o: src/%.cpp
 	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(TARGET): $(OBJS)
-	@echo [Tavern] Liaison de la DLL...
+	@echo [Tavern] Linking...
 	@$(CXX) $(LDFLAGS) $(OBJS) -o $(TARGET) $(LIBS)
 	@echo [Tavern] Compiled : $(TARGET)
 

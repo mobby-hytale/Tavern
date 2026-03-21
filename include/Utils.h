@@ -11,6 +11,9 @@ extern "C" {
 std::string GetName(UObject* Obj);
 UObject* FindObject(std::string NameContains);
 UObject* GetPlayerCharacter();
+uintptr_t FindPropertyOffset(UObject* Obj, const std::string& propName);
+std::string ReadUEName(uintptr_t objectBase);
+bool IsPropertyType(const std::string& typeName);
 
 void LuaRegister();
 void LoadLuaMods();
