@@ -20,7 +20,6 @@ namespace fs = std::filesystem;
 void __fastcall hkProcessEvent(UObject* pObject, UFunction* pFunction, void* pParams) {
 	static bool firstCall = true;
 	if (firstCall) {
-		Beep(1500, 200);
 		std::cout << "[Tavern] Hook active" << std::endl;
 		firstCall = false;
 	}
@@ -28,7 +27,6 @@ void __fastcall hkProcessEvent(UObject* pObject, UFunction* pFunction, void* pPa
 }
 
 void InitializeModLoader() {
-	Beep(500, 300);
 	std::cout << "[Tavern] Initializing" << std::endl;
 
 	uintptr_t addrTS = Scanner::FindPattern("48 89 5C 24 08 57 48 83 EC 30 83 79 04 00");
