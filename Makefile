@@ -53,4 +53,17 @@ clean:
 
 re: clean all
 
-.PHONY: all clean re
+PROXY_STEAM_SRC = proxy/proxy_steam.cpp
+PROXY_MS_SRC    = proxy/proxy_ms.cpp
+PROXY_STEAM     = xinput1_3.dll
+PROXY_MS        = xinput1_4.dll
+
+proxy:
+	@echo [Tavern] Compiling Steam proxy...
+	@$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PROXY_STEAM_SRC) -o $(PROXY_STEAM) -lkernel32
+	@echo [Tavern] Compiled : $(PROXY_STEAM)
+	@echo [Tavern] Compiling MS Store proxy...
+	@$(CXX) $(CXXFLAGS) $(LDFLAGS) $(PROXY_MS_SRC) -o $(PROXY_MS) -lkernel32
+	@echo [Tavern] Compiled : $(PROXY_MS)
+
+.PHONY: all clean re proxy
