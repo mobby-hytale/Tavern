@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <algorithm>
 #include "Scanner.h"
 #include "SDK.h"
 #include "Utils.h"
@@ -15,6 +16,56 @@ extern "C" {
 }
 
 namespace fs = std::filesystem;
+void __fastcall hkProcessEvent(UObject* pObject, UFunction* pFunction, void* pParams);
+
+std::map<std::string, int> eventHooks;
+
+void ApplyGlobalHook(UObject* target) {
+	if (!target || IsBadReadPtr(target, 8)) return;
+	
+	void** vtable = *(void***)target;
+	if (vtable[64] == reinterpret_cast<void*>(&hkProcessEvent)) return;
+
+	if (!oProcessEvent) {
+		oProcessEvent = (tProcessEvent)vtable[64];
+	}
+
+	DWORD oldProtect;
+	if (VirtualProtect(&vtable[64], sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+		vtable[64] = reinterpret_cast<void*>(&hkProcessEvent);
+		VirtualProtect(&vtable[64], sizeof(void*), oldProtect, &oldProtect);
+	}
+}
+
+void __fastcall hkProcessEvent(UObject* pObject, UFunction* pFunction, void* pParams) {
+	if (pObject) {
+		void** vtable = *(void***)pObject;
+
+		if (vtable[64] != reinterpret_cast<void*>(&hkProcessEvent)) {
+			ApplyGlobalHook(pObject);
+		}
+	}
+
+	if (pFunction && !eventHooks.empty()) {
+		std::string name = GetName((UObject*)pFunction);
+		auto it = eventHooks.find(name);
+		if (it != eventHooks.end()) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, it->second);
+			if (lua_isfunction(L, -1)) {
+				if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+					std::cout << "[Lua Error] " << lua_tostring(L, -1) << std::endl;
+					lua_pop(L, 1);
+				}
+			} else {
+				lua_pop(L, 1);
+			}
+		}
+	}
+
+	if (oProcessEvent) {
+		oProcessEvent(pObject, pFunction, pParams);
+	}
+}
 
 bool IsGameFullyLoaded() {
 	if (!GObjects) return false;
@@ -33,14 +84,10 @@ DWORD WINAPI MainThread(LPVOID lpParam) {
 	AllocConsole();
 	FILE* f; freopen_s(&f, "CONOUT$", "w", stdout);
 
-	std::cout << "[Tavern] Initializing" << std::endl;
+	std::cout << "[Tavern] Initializing..." << std::endl;
 
 	uintptr_t addrTS = Scanner::FindPattern("48 89 5C 24 08 57 48 83 EC 30 83 79 04 00");
-	if (!addrTS) {
-		std::cout << "[Tavern] Error: FNameToString not found" << std::endl;
-		FreeLibraryAndExitThread(static_cast<HMODULE>(lpParam), 0);
-		return 0;
-	}
+	while(!addrTS) addrTS = Scanner::FindPattern("48 89 5C 24 08 57 48 83 EC 30 83 79 04 00");
 	FNameToString = (tFNameToString)addrTS;
 
 	uintptr_t addrGObj = Scanner::FindPattern("48 8B 05 ? ? ? ? 48 8B 0C C8 48 8B 04 D1");
@@ -52,9 +99,23 @@ DWORD WINAPI MainThread(LPVOID lpParam) {
 	int32_t relOffset = *(int32_t*)(addrGObj + 3);
 	GObjects = (TUObjectArray*)(addrGObj + 7 + relOffset);
 
-	std::cout << "[Tavern] Waiting for the game ..." << std::endl;
+	std::cout << "[Tavern] Waiting for the game..." << std::endl;
 	while (!IsGameFullyLoaded()) Sleep(500);
 	std::cout << "[Tavern] Game ready (" << std::dec << GObjects->NumElements << " objects)" << std::endl;
+
+	std::cout << "[Tavern] Applying Global VTable Hook..." << std::endl;
+	int hookCount = 0;
+	for (int i = 0; i < GObjects->NumElements; i++) {
+		UObject* obj = GObjects->GetObjectById(i);
+		if (!obj || (uintptr_t)obj < 0x10000) continue;
+
+		void** vtable = *(void***)obj;
+		if (vtable && vtable[64] != reinterpret_cast<void*>(&hkProcessEvent)) {
+			ApplyGlobalHook(obj);
+			hookCount++;
+		}
+	}
+	std::cout << "[Tavern] Initial scan complete. Hooked via " << hookCount << " objects." << std::endl;
 
 	LuaRegister();
 	std::cout << "[Tavern] Lua engine ready" << std::endl;

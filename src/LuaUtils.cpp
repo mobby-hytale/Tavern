@@ -166,6 +166,14 @@ int Lua_Inspect(lua_State* L) {
 	return 0;
 }
 
+int Lua_RegisterEventHook(lua_State* L) {
+	const char* funcName = luaL_checkstring(L, 1);
+	if (!lua_isfunction(L, 2)) return 0;
+	int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	eventHooks[funcName] = ref;
+	return 0;
+}
+
 int Lua_ObjectNewIndex(lua_State* L) {
 	UObject** objPtr = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
 	
@@ -189,6 +197,22 @@ int Lua_ObjectNewIndex(lua_State* L) {
 	return 0;
 }
 
+int Lua_ObjectIndex(lua_State* L) {
+	UObject** objPtr = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
+	const char* propName = luaL_checkstring(L, 2);
+	if (!objPtr || !*objPtr) return 0;
+
+	uintptr_t offset = FindPropertyOffset(*objPtr, propName);
+	if (offset == 0) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	int val = *(int*)((uintptr_t)*objPtr + offset);
+	lua_pushinteger(L, val);
+	return 1;
+}
+
 UObject* GetAddressFromLua(lua_State* L, int idx) {
 	if (lua_isuserdata(L, idx)) {
 		UObject** ud = (UObject**)lua_touserdata(L, idx);
@@ -203,6 +227,40 @@ int Lua_GetName(lua_State* L) {
 	std::string name = ReadUEName((uintptr_t)*ud);
 	lua_pushstring(L, name.empty() ? "None" : name.c_str());
 	return 1;
+}
+
+int Lua_ReadFloat(lua_State* L) {
+	UObject** ud = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
+	int offset = (int)luaL_checkinteger(L, 2);
+
+	if (ud && *ud) {
+		uintptr_t addr = (uintptr_t)*ud + offset;
+		
+		if (!IsBadReadPtr((void*)addr, sizeof(float))) {
+			float val = *(float*)addr;
+			lua_pushnumber(L, (double)val);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+int Lua_ReadInt(lua_State* L) {
+	UObject** ud = (UObject**)luaL_checkudata(L, 1, "UObjectMeta");
+	int offset = (int)luaL_checkinteger(L, 2);
+
+	if (ud && *ud) {
+		uintptr_t addr = (uintptr_t)*ud + offset;
+		
+		if (!IsBadReadPtr((void*)addr, sizeof(int))) {
+			int val = *(int*)addr;
+			lua_pushinteger(L, val);
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 int Lua_WriteFloat(lua_State* L) {
@@ -392,15 +450,20 @@ void LuaRegister() {
 	lua_register(L, "FindAllOf",   Lua_FindAllOf);
 	lua_register(L, "GetName", Lua_GetName);
 	lua_register(L, "WriteFloat", Lua_WriteFloat);
+	lua_register(L, "ReadFloat", Lua_ReadFloat);
+	lua_register(L, "ReadInt", Lua_ReadInt);
 	lua_register(L, "RegisterKeyBind", Lua_RegisterKeyBind);
 	lua_register(L, "GetGEngine", Lua_GetGEngine);
 	lua_register(L, "ReadPtr", Lua_ReadPtr);
 	lua_register(L, "GetArrayElement", Lua_GetArrayElement);
 	lua_register(L, "Inspect", Lua_Inspect);
+	lua_register(L, "RegisterEventHook", Lua_RegisterEventHook);
 
 	luaL_newmetatable(L, "UObjectMeta");
 	lua_pushcfunction(L, Lua_ObjectNewIndex);
 	lua_setfield(L, -2, "__newindex");
+	lua_pushcfunction(L, Lua_ObjectIndex);
+	lua_setfield(L, -2, "__index");
 	lua_pop(L, 1);
 
 	LuaKeyRegister(L);

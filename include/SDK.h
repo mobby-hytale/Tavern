@@ -1,9 +1,11 @@
 #pragma once
+
 #include <windows.h>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <map>
 
 #define IS_VALID(p) (p && (uintptr_t)p > 0x10000 && !IsBadReadPtr((void*)p, 8))
 
@@ -11,8 +13,8 @@ struct UClass;
 struct UProperty;
 
 struct FName {
-	int32_t ComparisonIndex; 
-	int32_t Number; 
+	int32_t ComparisonIndex;
+	int32_t Number;
 };
 
 struct FString {
@@ -112,7 +114,7 @@ typedef void(__thiscall* tFNameToString)(const void*, FString&);
 extern tFNameToString FNameToString;
 extern TUObjectArray* GObjects;
 
-typedef void(__thiscall* tProcessEvent)(UObject*, UFunction*, void*);
+typedef void(__fastcall* tProcessEvent)(UObject*, UFunction*, void*);
 extern tProcessEvent oProcessEvent;
 
 namespace UE422 {

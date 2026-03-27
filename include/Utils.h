@@ -8,6 +8,9 @@ extern "C" {
 	#include "lua/lauxlib.h"
 }
 
+extern lua_State* L;
+extern std::map<std::string, int> eventHooks;
+
 std::string GetName(UObject* Obj);
 UObject* FindObject(std::string NameContains);
 UObject* GetPlayerCharacter();
