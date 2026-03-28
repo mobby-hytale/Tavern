@@ -5,7 +5,6 @@
 #include <map>
 #include <string>
 #include "Scanner.h"
-#include "minhook/MinHook.h"
 #include "SDK.h"
 #include "Utils.h"
 

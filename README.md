@@ -20,9 +20,5 @@ Tavern is a Minecraft Dungeons Mod Loader based that support lua, c++ and BluePr
 # How to install Mods
 - Place your mod on the `/Dungeons/Binaries/Win64/ue4ss/Mods/` folder
 
-# Library used
-- [MinHook](https://github.com/TsudaKageyu/minhook)
-- [Lua](https://www.lua.org/)
-
 # Thanks to
 - phoenixbulliner for the logo
